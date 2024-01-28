@@ -54,14 +54,13 @@ at_detector = Detector(families='tag36h11')
 capture_root = '/home/sc/yongqi/yolo/capture'
 layout = [
     [sg.Image(filename='', key='raw',size=(500,400))],
+    [sg.Text('fps = 0',  key="text")],
     [sg.Image(filename='', key='pred')],
     [sg.Radio('None', 'Radio', True, size=(10, 1))],
     [sg.Checkbox('Tripod', key='tripod')],
     [sg.Checkbox('Calibration', key='calib')],
     [sg.Checkbox('FindTag', key='tag')],
     [sg.Checkbox('Chair (check Tag and uncheck Calib)', key='chair')],
-    [sg.Slider((0, 255), 128, 1, orientation='h', size=(40, 15), key='thresh_slider')],
-
     [sg.Button('Capture', size=(20, 3))],
     [sg.Button('Exit', size=(20, 3))]
 ]
@@ -103,11 +102,13 @@ while True:
     boxes = pred[0].boxes.xyxy.tolist()
     classes = pred[0].boxes.cls.tolist()
     confidences = pred[0].boxes.conf.tolist()
-
+    fps = 1000/pred[0].speed["inference"]
+    window['text'].update("fps = {:.2f}".format(fps))
     gray = cv2.cvtColor(marked, cv2.COLOR_BGR2GRAY)
     fx,fy,cx,cy = mtx[0][0],mtx[1][1],mtx[0][2], mtx[1][2]
     cam_params = [fx, fy, cx, cy]
     tags = at_detector.detect(gray,estimate_tag_pose=True,camera_params=cam_params,tag_size=0.15)
+
     if len(tags)>0:
         rotm = tags[0].pose_R
         trasm = tags[0].pose_t
@@ -117,7 +118,7 @@ while True:
         for box, label, conf in zip(boxes, classes, confidences):
             if label == 56 and conf>=0.5:
                 center_x = box[0] + (box[2] - box[0]) /2 # col from up left
-                center_y = box[1] + (box[3] - box[1]) /2 # row fron up left
+                center_y = box[1] + (box[3] - box[1])*3/4 # row fron up left
                 cv2.circle(marked, (int(center_x),int(center_y)), 6, (0, 255, 255), 3)
                 point = [[center_x,center_y]]
                 point = np.array(point,dtype='float')
@@ -129,9 +130,11 @@ while True:
                 t = (np.dot(normal, origin_w)-np.dot(normal,plane_x0))/np.dot(normal,dir_w)
                 intersection_w = (origin_w - t * dir_w)
                 intersection_w = np.around(intersection_w,decimals=2)
+ 
                 text_str = str(intersection_w.tolist())
                 cv2.putText(marked,text_str,(int(center_x),int(center_y)),thickness=2,fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=0.5,color=(0,0,255))
-
+                with open('value.txt', 'w') as file:
+                    file.write(str(text_str))
 
 
 
@@ -153,8 +156,25 @@ while True:
             cv2.circle(marked, tuple(tag.corners[2].astype(int)), 4, (255, 0, 0), 2) # right-bottom
             cv2.circle(marked, tuple(tag.corners[3].astype(int)), 4, (255, 0, 0), 2) # left-bottom
 
-            # imgpos = np.one([4, 3])*0
-            # imgpos[:,:2] = tag.corners
+            # intersection_c_list = []
+
+            # for c in tag.corners:
+            #     point = c
+            #     point = np.array(point,dtype='float')
+            #     dir_cam = pixel2ray(point, mtx, dist).reshape((3,1))
+            #     origin_w = -np.dot(rotm.T, (np.array([[0],[0],[0]])- trasm))
+            #     dir_w = np.dot(rotm.T, dir_cam)
+            #     normal = np.array([[0,0,1]])
+            #     plane_x0 = np.array([[1,0,0]]).T
+            #     t = (np.dot(normal, origin_w)-np.dot(normal,plane_x0))/np.dot(normal,dir_w)
+            #     intersection_w = (origin_w - t * dir_w)
+            #     intersection_w = np.around(intersection_w,decimals=5)
+            #     intersection_c_list.append(intersection_w)
+
+            # scale_x = (abs(2/(intersection_c_list[1][0] - intersection_c_list[0][0])) + abs(2/(intersection_c_list[3][0] - intersection_c_list[2][0])))/2
+            # scale_y = (abs(2/(intersection_c_list[3][1] - intersection_c_list[0][1])) + abs(2/(intersection_c_list[2][1] - intersection_c_list[3][1])))/2
+
+
             cv2.circle(marked, tuple(tag.center.astype(int)), 4, (255, 0, 0), 4) #标记apriltag码中心点
             # M, e1, e2 = at_detector.detection_pose(tag, cam_params)
  
